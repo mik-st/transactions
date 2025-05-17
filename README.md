@@ -165,7 +165,7 @@ For each row in the `moments` DataFrame:
 
 - All data used for model training, assumptions, and editing can be found in the relevant notebooks and datasets.
 - You are encouraged to customize weights, costs, and training data to suit your specific use case.
-
+- For the description field, this could be generated using AI, which is not explained in this repo.
 ---
 
 ##Graph of the process:
