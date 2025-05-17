@@ -168,4 +168,9 @@ For each row in the `moments` DataFrame:
 
 ---
 
+##Graph of the process:
+![Data Generation Flow](transactions.jpg)
+ 
+
+
 Happy simulating! :) 
