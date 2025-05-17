@@ -1,0 +1,259 @@
+
+This notebook is for training m1, which predicts the education_level based on age, gender, country.
+
+#Models compared:
+
+##1 Random Forest
+##2 Logistic Regression
+##3 KNN
+##4 XGP
+ 
+#Model chosed:
+# Random Forest
+ 
+The overall accuracy and mean macro AUC were compared between all models. 
+
+ 
+ 
+Note. In case you want to chose a different model i.e. if you update the data or you have a different opinion.
+Just assign the m1 model to your newly chosed model at the end of this notebook.
+
+```{r}
+#saveRDS(m1_rf_model, "m1.rds")
+
+```
+
+
+```{r}
+rm(list = ls())
+
+library(openxlsx)
+library(caret)
+library(nnet)         # for multinom
+library(randomForest) # for random forest
+library(rpart)        # for decision tree
+library(class)        # for KNN
+library(randomForest)
+library(caret)
+library(xgboost)
+library(pROC)
+library(MLmetrics)
+library(dplyr)
+
+# Read the Excel file
+df <- read.xlsx("ai_traininig_df_final.xlsx", sheet = 1) 
+df
+```
+
+#Data preparation:
+
+```{r}
+
+ 
+
+library(caret)
+
+df =   df[complete.cases(df), ]  
+ 
+df$gender <- factor(df$gender)
+df$country <- factor(df$country)
+df$education_level <- factor(df$education_level)
+df$education_title <- factor(df$education_title)
+df$profession <- factor(df$profession)
+df$years_experience = as.integer(df$years_experience)
+df$salary_eur = as.integer(df$salary_eur)
+df$balance_eur = as.integer(df$balance_eur)
+df$working = factor( df$working)
+df$spendingBehaviour =  factor( df$spendingBehaviour)
+#Splitting the data into training and testing sets
+set.seed(42)   
+trainIndex <- createDataPartition(df$education_level, p = 0.8, list = FALSE)
+train <- df[trainIndex, ]
+test  <- df[-trainIndex, ]
+
+train$profession <- factor(train$profession)
+test$profession <- factor(test$profession)
+
+
+
+
+```
+
+
+```{r}
+table(train$education_level)
+```
+
+
+
+
+#1 Random Forest
+
+```{r}
+
+# Step 3: Train the model using Random Forest
+rf_model <- randomForest(education_level ~ age + gender + country, data = train)
+
+# Step 4: Make predictions and evaluate the model
+
+# Predict on the test set
+rf_model_predictions  <- predict(rf_model, test)
+rf_model_prob_matrix <- predict(rf_model, newdata = test, type = "prob")
+
+ 
+# # Confusion Matrix to get detailed evaluation metrics
+# conf_mat_rf_model =confusionMatrix(rf_model_predictions, test$education_level)
+# conf_mat_rf_model
+
+```
+
+```{r}
+table(rf_model_predictions)
+```
+  
+
+
+#2 Logistic Regression
+
+```{r}
+log_reg_model <- multinom(education_level ~ age + gender + country, data = train)
+
+# Predict
+log_reg_model_predictions <- predict(log_reg_model, newdata = test)
+log_reg_model_prob_matrix <- predict(log_reg_model, newdata = test, type = "prob")
+
+# Evaluate
+# confusionMatrix(pred_log, test$education_level)
+```
+```{r}
+table(log_reg_model_predictions)
+
+```
+
+#3 KNN
+
+```{r}
+ 
+
+knn_model <- train(education_level ~   age + gender + country, data = train , method = "knn", 
+                   trControl = trainControl(classProbs = TRUE))
+
+# Predict class probabilities on test data
+knn_model_prob_matrix  <- predict(knn_model, newdata = test , type = "prob")
+
+# Predict final classes (for accuracy)
+knn_model_predictions  <- predict(knn_model, newdata = test , type = "raw")
+
+ 
+# Evaluate
+# confusionMatrix(knn_model_predictions, test$education_level)
+
+```
+
+#4  Decision tree
+
+```{r}
+# Decision tree model
+tree_model <- rpart(education_level ~ age + gender + country, data = train, method = "class")
+
+# Predict
+tree_model_predictions <- predict(tree_model, newdata = test, type = "class")
+
+tree_model_prob_matrix  <- predict(tree_model, newdata = test , type = "prob")
+
+# Evaluate
+# confusionMatrix(pred_tree, test$education_level)
+
+```
+
+  
+
+```{r}
+ 
+ 
+
+xgb_model <- train(education_level ~   age + gender + country  , data = train , method = "xgbTree", 
+                    trControl = trainControl(classProbs = TRUE),
+                   tuneGrid = expand.grid(nrounds = 100, max_depth = 6, eta = 0.3, 
+                                          gamma = 0, colsample_bytree = 0.8, 
+                                          min_child_weight = 1, subsample = 0.8),
+                   verbose = TRUE) 
+
+
+# Predict on test set
+ 
+xgb_model_prob_matrix <- predict(xgb_model, newdata = test , type = "prob")
+xgb_model_predictions <- predict(xgb_model, newdata = test , type = "raw")
+
+
+```
+
+ 
+```{r}
+table(xgb_model_predictions)
+```
+
+
+Models Comparison:
+To evaluate our models, we will create a df for the results
+```{r}
+results_df <- data.frame(
+  Model = character(),
+  Accuracy = numeric(),
+  Macro_AUC = numeric(),
+  stringsAsFactors = FALSE
+)
+
+evaluate_model <- function(model_name, actual, predictions, prob_matrix) {
+  # Accuracy
+  accuracy <- mean(predictions == actual)
+  
+  # Macro AUC
+  classes <- unique(actual)
+  auc_values <- sapply(classes, function(cls) {
+    roc_result <- roc(actual == cls, prob_matrix[,cls])
+    auc(roc_result)
+  })
+  macro_auc <- mean(auc_values)
+  
+  # Add to dataframe
+  new_row <- data.frame(
+    Model = model_name,
+    Accuracy = accuracy,
+    Macro_AUC = macro_auc
+  )
+  
+  return(new_row)
+}
+ 
+actual=test$education_level
+
+
+
+results_df <- bind_rows(results_df, evaluate_model("Random Forest", actual, rf_model_predictions, rf_model_prob_matrix ))
+
+ 
+results_df <- bind_rows(results_df, evaluate_model("Multiple Logistic Regression", actual, log_reg_model_predictions, log_reg_model_prob_matrix ))
+
+#results_df <- bind_rows(results_df, evaluate_model("KNN", actual, knn_model_predictions, knn_model_prob_matrix))
+
+results_df <- bind_rows(results_df, evaluate_model("XGB", actual, xgb_model_predictions, xgb_model_prob_matrix ))
+
+results_df <- bind_rows(results_df, evaluate_model("Decision tree", actual, tree_model_predictions, tree_model_prob_matrix ))
+
+
+ 
+results_df
+```
+
+
+We will choose the rf model
+```{r}
+
+saveRDS(rf_model , "m1.rds")
+
+```
+ 
+
+ 
+

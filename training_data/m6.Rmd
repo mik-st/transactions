@@ -1,0 +1,322 @@
+
+
+
+This notebook is for training m6.
+# m6   age, gender, country,  education level,  education_title , profession, years_experience  ,  working  > salary
+
+
+#Models compared:
+
+##1 Random Forest
+##2 Linear Regression
+##3 KNN
+##4 XGP
+#5 Decision tree
+ 
+#Model chosed:
+# Random Forest
+ 
+MAE and RMSE were compared between all models. 
+
+ 
+ 
+Note. In case you want to chose a different model i.e. if you update the data or you have a different opinion.
+Just assign the m1 model to your newly chosed model at the end of this notebook.
+
+```{r}
+#saveRDS(m1_rf_model, "m4.rds")
+
+```
+
+
+```{r}
+rm(list = ls())
+
+library(openxlsx)
+library(caret)
+library(nnet)         # for multinom
+library(randomForest) # for random forest
+library(rpart)        # for decision tree
+library(class)        # for KNN
+library(randomForest)
+library(caret)
+library(xgboost)
+library(pROC)
+library(MLmetrics)
+library(dplyr)
+
+# Read the Excel file
+df <- read.xlsx("ai_traininig_df_final.xlsx", sheet = 1) 
+df
+```
+
+#Data preparation:
+
+```{r}
+library(caret)
+
+df =   df[complete.cases(df), ]  
+ 
+df$gender <- factor(df$gender)
+df$country <- factor(df$country)
+df$education_level <- factor(df$education_level)
+df$education_title <- factor(df$education_title)
+df$profession <- factor(df$profession)
+df$years_experience = as.integer(df$years_experience)
+df$salary_eur = as.integer(df$salary_eur)
+df$balance_eur = as.integer(df$balance_eur)
+
+
+#Splitting the data into training and testing sets
+set.seed(42)   
+trainIndex <- createDataPartition(df$profession, p = 0.8, list = FALSE)
+train <- df[trainIndex, ]
+test  <- df[-trainIndex, ]
+
+train$profession <- factor(train$profession)
+test$profession <- factor(test$profession)
+
+
+
+```
+
+
+
+
+
+
+#1 Random Forest
+ 
+
+
+
+```{r}
+
+library(ranger)
+
+rf_model <- ranger(
+  salary_eur ~ years_experience +    gender + country + profession,
+  data = train,
+  num.trees = 500,
+  importance = 'impurity',
+  regression = TRUE
+)
+ 
+
+ 
+
+ 
+rf_model_predictions <- predict(rf_model, data = test )
+ 
+# Calculate errors
+errors <- rf_model_predictions$predictions   - test$salary_eur
+
+# RMSE (Root Mean Squared Error)
+rf_model_rmse  <- sqrt(mean(errors^2))
+
+# MAE (Mean Absolute Error)
+rf_model_mae  <- mean(abs(errors))
+
+print(rf_model_mae)
+print(rf_model_rmse)
+ 
+ 
+```
+
+  
+
+
+#2 Linear Regression
+
+```{r}
+ 
+# Fit the linear regression model
+linear_model <- lm( salary_eur ~ years_experience +    gender + country + profession, data = train)
+
+ 
+
+ 
+linear_model_predictions =  predict(linear_model, newdata = test)
+
+errors <- test$salary_eur- linear_model_predictions
+
+linear_model_mae <- mean(abs(errors))
+
+linear_model_rmse  <- sqrt(mean(errors^2))
+print(linear_model_mae)
+print(linear_model_rmse)
+ 
+```
+ 
+ 
+
+#3 KNN
+
+```{r}
+ 
+knn_model <- train(
+  salary_eur ~ years_experience + gender + country + profession, 
+  data = train, 
+  method = "knn", 
+  trControl = trainControl(method = "cv", number = 10), # Use cross-validation (CV)
+  tuneLength = 10 # Tune K parameter for optimal value (number of neighbors)
+)
+
+# Predict class probabilities on test data
+ 
+# Predict final classes (for accuracy)
+knn_model_predictions  <- predict(knn_model, newdata = test , type = "raw")
+
+
+errors <- test$salary_eur - knn_model_predictions
+
+knn_model_mae <- mean(abs(errors))
+
+knn_model_rmse  <- sqrt(mean(errors^2))
+print(knn_model_mae)
+print(knn_model_rmse)
+
+ 
+
+```
+
+#4  Decision tree
+
+```{r}
+# Decision tree model
+tree_model <- rpart( salary_eur ~ years_experience + gender + country + profession, data = train, method = "anova")
+
+# Predict
+tree_model_predictions <- predict(tree_model, newdata = test )
+
+
+
+errors <- test$salary_eur - tree_model_predictions
+
+tree_model_mae <- mean(abs(errors))
+
+tree_model_rmse  <- sqrt(mean(errors^2))
+
+print(tree_model_mae)
+print(tree_model_rmse)
+
+
+ 
+ 
+
+```
+
+  
+
+```{r}
+ 
+ 
+
+xgb_model <- train(salary_eur ~ years_experience + gender + country + profession , data = train , method = "xgbTree", 
+                    trControl = trainControl(classProbs = TRUE),
+                   tuneGrid = expand.grid(nrounds = 100, max_depth = 6, eta = 0.3, 
+                                          gamma = 0, colsample_bytree = 0.8, 
+                                          min_child_weight = 1, subsample = 0.8),
+                   verbose = TRUE) 
+
+
+# Predict on test set
+ 
+ 
+xgb_model_predictions <- predict(xgb_model, newdata = test , type = "raw")
+
+
+errors <- test$salary_eur - xgb_model_predictions
+
+xgb_model_mae <- mean(abs(errors))
+
+xgb_model_rmse  <- sqrt(mean(errors^2))
+
+print(xgb_model_mae)
+print(xgb_model_rmse)
+
+
+
+```
+
+ 
+
+
+Models Comparison:
+To evaluate our models, we will create a df for the results
+```{r}
+
+results_df <- data.frame(
+  Model = character(),
+  MAE = numeric(),
+  RMSE = numeric() 
+ 
+)
+
+
+ 
+
+rf_model_results= data.frame(
+  Model ='Random Forest',
+  MAE =  rf_model_mae,
+  RMSE =rf_model_rmse
+ 
+)
+ 
+ linear_model_results= data.frame(
+  Model ='Linear Regression',
+  MAE =  linear_model_mae,
+  RMSE =linear_model_rmse
+ 
+)
+ 
+ 
+  knn_model_results= data.frame(
+  Model ='KNN',
+  MAE =  knn_model_mae,
+  RMSE =knn_model_rmse
+ 
+)
+ 
+   tree_model_results= data.frame(
+  Model ='Decision tree',
+  MAE =  tree_model_mae,
+  RMSE =tree_model_rmse
+ 
+)
+  
+      xgb_model_results= data.frame(
+  Model ='XGB',
+  MAE =    xgb_model_mae,
+  RMSE =  xgb_model_rmse
+ 
+)
+  
+  
+ 
+
+results_df <- bind_rows(results_df, rf_model_results )
+results_df <- bind_rows(results_df, linear_model_results )
+
+results_df <- bind_rows(results_df, knn_model_results )
+
+results_df <- bind_rows(results_df, tree_model_results )
+
+results_df <- bind_rows(results_df, xgb_model_results )
+
+  
+results_df
+```
+
+
+We will choose the XGB model
+```{r}
+
+saveRDS(xgb_model , "m6.rds")
+
+```
+ 
+ 
+ 
+
+

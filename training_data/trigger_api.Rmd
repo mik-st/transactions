@@ -1,0 +1,11 @@
+
+
+```{r}
+library(plumber)
+
+pr <- plumb("api.R")
+pr$run(port=8000)
+```
+
+ 
+ 

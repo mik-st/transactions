@@ -1,0 +1,198 @@
+
+
+
+This notebook is for training m5.
+working ~  years_experience + age, gender, country,   profession
+#Models compared:
+
+##1 Random Forest
+##2 Logistic Regression
+##3 KNN
+##4 XGP
+ 
+#Model chosed:
+# Random Forest
+ 
+ 
+ 
+ 
+Note. In case you want to chose a different model i.e. if you update the data or you have a different opinion.
+Just assign the m1 model to your newly chosed model at the end of this notebook.
+
+```{r}
+#saveRDS(m1_rf_model, "m1.rds")
+
+```
+
+
+```{r}
+rm(list = ls())
+
+library(openxlsx)
+library(caret)
+library(nnet)         # for multinom
+library(randomForest) # for random forest
+library(rpart)        # for decision tree
+library(class)        # for KNN
+library(randomForest)
+library(caret)
+library(xgboost)
+library(pROC)
+library(MLmetrics)
+library(dplyr)
+
+# Read the Excel file
+df <- read.xlsx("ai_traininig_df_final.xlsx", sheet = 1) 
+df
+```
+
+#Data preparation:
+
+```{r}
+library(caret)
+
+df =   df[complete.cases(df), ]  
+ 
+df$gender <- factor(df$gender)
+df$country <- factor(df$country)
+df$education_level <- factor(df$education_level)
+df$education_title <- factor(df$education_title)
+df$profession <- factor(df$profession)
+df$years_experience = as.integer(df$years_experience)
+df$working =  factor(df$working)
+
+
+#Splitting the data into training and testing sets
+set.seed(42)   
+trainIndex <- createDataPartition(df$working, p = 0.8, list = FALSE)
+train <- df[trainIndex, ]
+test  <- df[-trainIndex, ]
+
+train$profession <- factor(train$profession)
+test$profession <- factor(test$profession)
+
+
+
+
+
+```
+
+
+
+
+
+
+#1 Random Forest
+
+```{r}
+ library(ranger)
+
+rf_model <- ranger(
+  working ~     age + gender +years_experience+ country+ profession,
+  data = train,
+  num.trees = 500,
+  importance = 'impurity',
+  regression = TRUE
+)
+ 
+ 
+
+ 
+# Predict on the test set
+rf_model_predictions  <- predict(rf_model, test)
+ # Predict on the test set
+rf_model_probs  <- predict(rf_model, test , type = 'response')
+ rf_model_probs
+ 
+# # Confusion Matrix to get detailed evaluation metrics
+conf_mat_rf_model =confusionMatrix(rf_model_predictions$predictions, test$working)
+conf_mat_rf_model$overall 
+conf_mat_rf_model
+```
+
+  
+
+
+#2 Logistic Regression
+
+```{r}
+log_reg_model <-  glm(
+  working ~ age + gender + years_experience + country + profession,
+  data = train,
+  family = binomial
+)
+
+# Predict
+log_reg_model_predictions <- predict(log_reg_model, newdata = test, type = "response")
+ 
+
+log_reg_predicted_class <- as.factor (ifelse(log_reg_model_predictions >= 0.5, 1, 0))
+
+
+
+# Evaluate
+confusionMatrix(log_reg_predicted_class, test$working)
+```
+ 
+
+#4  Decision tree
+
+```{r}
+# Decision tree model
+tree_model <- rpart(  working ~ age + gender + years_experience + country + profession, data = train, method = "class")
+
+# Predict
+tree_model_predictions <- predict(tree_model, newdata = test, type = "class")
+
+tree_model_prob_matrix  <- predict(tree_model, newdata = test , type = "prob")
+
+# Evaluate
+confusionMatrix(tree_model_predictions, test$working)
+
+```
+
+  
+
+```{r}
+ 
+train$working <- factor(train$working, levels = c(0, 1), labels = c("No", "Yes"))
+test$working <- factor(test$working, levels = c(0, 1), labels = c("No", "Yes"))
+
+xgb_model <- train( working ~ age + gender + years_experience + country + profession  , data = train , method = "xgbTree", 
+                    trControl = trainControl(classProbs = TRUE),
+                   tuneGrid = expand.grid(nrounds = 100, max_depth = 6, eta = 0.3, 
+                                          gamma = 0, colsample_bytree = 0.8, 
+                                          min_child_weight = 1, subsample = 0.8),
+                   verbose = TRUE) 
+
+
+# Predict on test set
+ 
+xgb_model_prob_matrix <- predict(xgb_model, newdata = test , type = "prob")
+xgb_model_predictions <- predict(xgb_model, newdata = test , type = "raw")
+
+
+
+confusionMatrix(xgb_model_predictions, test$working)
+
+```
+
+ 
+
+
+Models Comparison:
+ 
+we will choose random forest, since acc=1 and sensitivity =1
+
+
+
+We will choose the rf model
+```{r}
+
+saveRDS(rf_model , "m5.rds")
+
+```
+ 
+
+ 
+
